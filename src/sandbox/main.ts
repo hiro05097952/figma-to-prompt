@@ -639,10 +639,30 @@ async function handleSelection(): Promise<void> {
   figma.ui.postMessage(msg);
 
   // Auto-export images at original quality (scale=0 → getImageByHash)
-  exportImages(normalized, 0, 'PNG', exportId);
+  runExport(exportImages(normalized, 0, 'PNG', exportId), exportId);
 }
 
 // ── Message Listeners ────────────────────────────────────
+
+/** Every export path ends in the one postMessage the UI is waiting on, so a throw
+ *  before that point leaves the preview spinning forever with nothing in the
+ *  console. Each export has internal try/catch around the parts it can recover
+ *  from; this is the outer net for everything else (node lookup, raster
+ *  measurement, encoding) so a failure always reaches the UI as an error. */
+function runExport(task: Promise<void>, exportId: number): void {
+  void task.catch((err: unknown) => {
+    if (exportId !== currentExportId) return;
+    // Duck-typed, not `instanceof Error`: the plugin sandbox is its own realm, so
+    // an error thrown by the Figma host fails the instance check and would
+    // stringify to a useless "[object Object]".
+    const message = (err as { message?: unknown } | null)?.message;
+    figma.ui.postMessage({
+      type: 'image-data',
+      images: {},
+      error: String(message ?? err),
+    } satisfies SandboxMessage);
+  });
+}
 
 // UI → Sandbox: handle scale/format/mode change requests
 figma.ui.onmessage = (msg: UIMessage) => {
@@ -651,11 +671,11 @@ figma.ui.onmessage = (msg: UIMessage) => {
   } else if (msg.type === 'export-images' && lastNormalized) {
     const exportId = ++currentExportId;
     if (msg.mode === 'merged') {
-      exportMerged(lastNormalized, msg.scale, msg.format, exportId);
+      runExport(exportMerged(lastNormalized, msg.scale, msg.format, exportId), exportId);
     } else if (msg.mode === 'per-selection') {
-      exportPerSelection(msg.scale, msg.format, exportId);
+      runExport(exportPerSelection(msg.scale, msg.format, exportId), exportId);
     } else {
-      exportImages(lastNormalized, msg.scale, msg.format, exportId);
+      runExport(exportImages(lastNormalized, msg.scale, msg.format, exportId), exportId);
     }
   }
 };

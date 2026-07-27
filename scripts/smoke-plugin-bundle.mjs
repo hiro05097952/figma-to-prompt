@@ -250,4 +250,24 @@ const futureSelection = await waitForMessage('export-result', futureStart);
 assert.equal(futureSelection?.data.id, futureNode.id);
 assert.equal(futureSelection?.data.type, 'FUTURE_MEDIA');
 
-console.log('Plugin bundle smoke passed: guarded extraction, concurrent capture, and all raster export modes.');
+// A throw outside an export's own try/catch (node lookup, raster measurement)
+// used to reject unhandled, so the UI never got an `image-data` reply and sat on
+// "Generating preview…" forever with nothing in the console. Every export path
+// must reach the UI, failure included.
+figma.currentPage.selection = [root];
+listeners.get('selectionchange')();
+await waitForMessage('export-result', messages.length - 1);
+
+const originalGetNodeByIdAsync = figma.getNodeByIdAsync;
+figma.getNodeByIdAsync = async () => {
+  throw new Error('smoke: node lookup exploded');
+};
+const failureStart = messages.length;
+figma.ui.onmessage({ type: 'export-images', mode: 'merged', scale: 2, format: 'PNG' });
+const failure = await waitForMessage('image-data', failureStart);
+assert.equal(failure.error, 'smoke: node lookup exploded');
+// Cross-realm object, so compare shape rather than identity.
+assert.equal(Object.keys(failure.images).length, 0);
+figma.getNodeByIdAsync = originalGetNodeByIdAsync;
+
+console.log('Plugin bundle smoke passed: guarded extraction, concurrent capture, all raster export modes, and export failure reporting.');

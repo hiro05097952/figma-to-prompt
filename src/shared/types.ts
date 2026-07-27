@@ -477,6 +477,9 @@ export interface ImageDataMessage {
   type: 'image-data';
   /** Map of nodeId → base64 data URL (e.g. "data:image/png;base64,..."). Empty in merged mode. */
   images: Record<string, string>;
+  /** Set when the export threw. The UI must surface this instead of waiting
+   *  forever — a preview that never arrives is indistinguishable from a slow one. */
+  error?: string;
   /** Merged composite image (whole selected node rendered as one image). Only set in merged mode. */
   merged?: string;
   /** Real source-pixel evidence for render-specific Orig exports. This is

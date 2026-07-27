@@ -173,6 +173,7 @@ export function App() {
             images: msg.images,
             merged: msg.merged ?? null,
             sourceRasterEvidence: msg.sourceRasterEvidence,
+            error: msg.error,
           });
         }
       }

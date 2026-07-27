@@ -85,6 +85,19 @@ function PreviewArea({ state, assets }: { state: State; assets: ImageAsset[] }) 
     );
   }
 
+  // A failed export delivers no pixels, which is indistinguishable from a slow
+  // one — without this the preview spins forever. `imageExportPending` outranks
+  // the error so a retry shows "loading" rather than the previous failure.
+  if (state.imageError && !state.imageExportPending) {
+    return (
+      <div class="preview-area" aria-live="polite">
+        <div class="preview-placeholder" role="alert">
+          Preview failed: {state.imageError}
+        </div>
+      </div>
+    );
+  }
+
   // Loading must be judged by the CURRENT mode's data: the reducer now preserves
   // the other mode's preview across MODE_CHANGED (to avoid a blank flash when
   // toggling export settings on the same frame), so a stale `images` map from

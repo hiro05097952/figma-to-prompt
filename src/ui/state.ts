@@ -34,6 +34,10 @@ export interface State {
   rawMerged: string | null;
   sourceRasterEvidence: Record<string, ImageSourceRasterEvidence>;
   imageExportPending: boolean;
+  /** Why the last export failed, if it did. Cleared by the next successful
+   *  delivery; `imageExportPending` outranks it so a retry shows "loading",
+   *  not the stale error. */
+  imageError: string | null;
   scale: number; // 0 = original (getImageByHash), 1..4 = px multiplier
   format: ImageFormat;
   /** Active canvas.toBlob quality for lossy formats. Ignored for PNG and SVG. */
@@ -64,6 +68,7 @@ export const initialState: State = {
   rawMerged: null,
   sourceRasterEvidence: {},
   imageExportPending: false,
+  imageError: null,
   scale: 2,
   format: 'PNG',
   quality: DEFAULT_QUALITY,
@@ -86,6 +91,7 @@ export type Action =
       images: Record<string, string>;
       merged?: string | null;
       sourceRasterEvidence?: Record<string, ImageSourceRasterEvidence>;
+      error?: string;
     }
   /** Preview images ready for display. */
   | { type: 'IMAGES_RECEIVED'; images: Record<string, string>; merged?: string | null }
@@ -203,6 +209,7 @@ export function reducer(state: State, action: Action): State {
         rawMerged: action.merged ?? null,
         sourceRasterEvidence: action.sourceRasterEvidence ?? {},
         imageExportPending: false,
+        imageError: action.error ?? null,
       };
 
     case 'IMAGES_RECEIVED':
