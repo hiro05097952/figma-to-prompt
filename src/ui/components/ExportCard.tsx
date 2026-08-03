@@ -14,7 +14,6 @@ import { createZip, dataUrlToBlob, dataUrlToText, downloadBlob } from '../downlo
 import { readImageDimensions, transcodeDataUrl } from '../transcode';
 import {
   assertMinimumRasterDensity,
-  assertMinimumSourceRasterDensity,
   MIN_SHARP_RASTER_SCALE,
 } from '../../shared/rasterScale';
 import {
@@ -646,11 +645,19 @@ function DownloadButton({ state, dirHandle, fsaSupported }: DownloadButtonProps)
           : state.scale;
         for (const asset of collectImageAssets(state.data)) {
           if (state.scale === 0 && !asset.renderSpecific) continue;
-          assertMinimumSourceRasterDensity(
-            state.sourceRasterEvidence[asset.nodeId],
-            requiredSourceScale,
-            asset.nodeName,
-          );
+          const evidence = state.sourceRasterEvidence[asset.nodeId];
+          if (
+            !evidence?.verified
+            || !Number.isFinite(evidence.density)
+            || (evidence.density as number) + 0.01 < requiredSourceScale
+          ) {
+            const densityStr = Number.isFinite(evidence?.density)
+              ? `${(evidence!.density as number).toFixed(2)}×`
+              : 'unknown';
+            console.warn(
+              `[source-density] ${asset.nodeName}: density ${densityStr}, required ${requiredSourceScale}×`,
+            );
+          }
         }
       }
 
@@ -668,12 +675,16 @@ function DownloadButton({ state, dirHandle, fsaSupported }: DownloadButtonProps)
         const dataUrl = await transcodeDataUrl(source, state.format, state.quality);
         if (state.format !== 'SVG' && state.data.layout && state.scale > 0) {
           const logicalSize = state.data.layout.renderBounds ?? state.data.layout;
-          assertMinimumRasterDensity(
-            await readImageDimensions(dataUrl),
-            logicalSize,
-            state.scale,
-            state.data.name,
-          );
+          try {
+            assertMinimumRasterDensity(
+              await readImageDimensions(dataUrl),
+              logicalSize,
+              state.scale,
+              state.data.name,
+            );
+          } catch (e) {
+            console.warn(`[raster-density] ${(e as Error).message}`);
+          }
         }
         const blob = await dataUrlToBlob(dataUrl);
         outputs.push({
@@ -701,15 +712,19 @@ function DownloadButton({ state, dirHandle, fsaSupported }: DownloadButtonProps)
             && asset.width > 0
             && asset.height > 0
           ) {
-            assertMinimumRasterDensity(
-              await readImageDimensions(dataUrl),
-              {
-                width: asset.renderWidth ?? asset.width,
-                height: asset.renderHeight ?? asset.height,
-              },
-              minimumScale,
-              asset.nodeName,
-            );
+            try {
+              assertMinimumRasterDensity(
+                await readImageDimensions(dataUrl),
+                {
+                  width: asset.renderWidth ?? asset.width,
+                  height: asset.renderHeight ?? asset.height,
+                },
+                minimumScale,
+                asset.nodeName,
+              );
+            } catch (e) {
+              console.warn(`[raster-density] ${(e as Error).message}`);
+            }
           }
           const ext = perImageExt(state.scale, state.format, dataUrl);
           const blob = await dataUrlToBlob(dataUrl);
@@ -973,7 +988,17 @@ export function ExportCard({ state, dispatch }: Props) {
 
       {sourceDensityProblems.length > 0 && !state.imageExportPending && (
         <div class="source-density-warning" role="alert">
-          {sourceDensityProblems.length} image{sourceDensityProblems.length === 1 ? '' : 's'} cannot prove {requiredSourceScale}× real source detail for this export. Download is stopped until the source image is replaced or reloaded at higher resolution.
+          {sourceDensityProblems.map((asset) => {
+            const evidence = state.sourceRasterEvidence[asset.nodeId];
+            const density = Number.isFinite(evidence?.density)
+              ? `${(evidence!.density as number).toFixed(2)}×`
+              : 'unknown';
+            return (
+              <div key={asset.nodeId}>
+                {asset.nodeName}: {density} source detail (required {requiredSourceScale}×). Export will proceed but may appear blurry.
+              </div>
+            );
+          })}
         </div>
       )}
 
