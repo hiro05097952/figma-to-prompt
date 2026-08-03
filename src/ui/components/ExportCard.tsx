@@ -179,15 +179,10 @@ const QUALITY_PRESETS = [0.6, 0.75, 0.9, 1];
  *  Every change dispatches QUALITY_CHANGED; the transcode effect in App.tsx
  *  races its own generations so only the last value wins during a drag. */
 function QualityRow({ quality, onChange }: QualityRowProps) {
-  function handleInput(e: JSX.TargetedEvent<HTMLInputElement>) {
-    const v = Number(e.currentTarget.value);
-    if (!Number.isFinite(v)) return;
-    onChange(v);
-  }
-  const pct = Math.round(quality * 100);
-  // Preset active only when the slider is close enough — tolerance avoids
-  // flicker when the user stops mid-drag near a preset value.
-  const activePreset = QUALITY_PRESETS.find((p) => Math.abs(p - quality) < 0.025);
+  const [localValue, setLocalValue] = useState<number | null>(null);
+  const displayValue = localValue ?? quality;
+  const pct = Math.round(displayValue * 100);
+  const activePreset = QUALITY_PRESETS.find((p) => Math.abs(p - displayValue) < 0.025);
   return (
     <div class="quality-row">
       <div class="quality-row-line">
@@ -204,7 +199,7 @@ function QualityRow({ quality, onChange }: QualityRowProps) {
                 type="button"
                 class={active ? 'quality-preset active' : 'quality-preset'}
                 aria-pressed={active}
-                onClick={() => onChange(p)}
+                onClick={() => { setLocalValue(null); onChange(p); }}
               >
                 {Math.round(p * 100)}
               </button>
@@ -219,9 +214,17 @@ function QualityRow({ quality, onChange }: QualityRowProps) {
         min="0.3"
         max="1"
         step="0.01"
-        value={quality}
+        value={displayValue}
         aria-label="Encode quality"
-        onInput={handleInput}
+        onInput={(e) => {
+          const v = Number((e.target as HTMLInputElement).value);
+          if (Number.isFinite(v)) setLocalValue(v);
+        }}
+        onChange={(e) => {
+          const v = Number((e.target as HTMLInputElement).value);
+          setLocalValue(null);
+          if (Number.isFinite(v)) onChange(v);
+        }}
       />
     </div>
   );
